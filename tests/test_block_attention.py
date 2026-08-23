@@ -212,11 +212,14 @@ def _build_random_table(torch, seed, seq_lens=(192, 150), num_heads=2, head_dim=
 
 
 def _assert_close(got, want, atol, rtol, label):
-    diff = (got.float() - want.float()).abs()
-    max_diff = diff.max().item()
-    assert torch.allclose(got.float(), want.float(), atol=atol, rtol=rtol), (
-        f"{label}: max abs diff {max_diff:.3e} exceeds atol={atol} rtol={rtol}"
-    )
+    # torch-free comparison: this module must stay importable on CPU-only
+    # machines, so the helper never references the module-global `torch`
+    # (tests that need it bind a local `torch = _gpu_stack()`).
+    g = got.detach().flatten().tolist()
+    w = want.detach().flatten().tolist()
+    max_diff = max(abs(a - b) for a, b in zip(g, w))
+    ok = all(abs(a - b) <= atol + rtol * abs(b) for a, b in zip(g, w))
+    assert ok, f"{label}: max abs diff {max_diff:.3e} exceeds atol={atol} rtol={rtol}"
 
 
 def test_kernel_matches_dense_reference_with_rope_bias_mask():
