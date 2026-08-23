@@ -419,7 +419,7 @@ def block_attention(
 
     # ---- validate page-table contents against the caches (host side) ------
     pt_list = _as_int32(page_table.contiguous(), "page_table").tolist()
-    lens = _as_int32(seq_lens.contiguous()).tolist()
+    lens = _as_int32(seq_lens.contiguous(), "seq_lens").tolist()
     max_len = 0
     for s_i, row in enumerate(pt_list):
         need = (lens[s_i] + BLOCK_SIZE - 1) // BLOCK_SIZE
