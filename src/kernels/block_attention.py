@@ -255,7 +255,7 @@ if HAS_TRITON:
         q0r = q0 * q_cos - q1 * q_sin
         q1r = q0 * q_sin + q1 * q_cos
 
-        m_i = tl.full([BLOCK], float("-inf"), tl.float32)
+        m_i = tl.full([BLOCK], -1e30, tl.float32)
         l_i = tl.zeros([BLOCK], tl.float32)
         acc = tl.zeros([BLOCK, HEAD_DIM], tl.float32)
 
@@ -304,7 +304,7 @@ if HAS_TRITON:
                 qk = qk + bias_tile.to(tl.float32)
 
             # Ragged tail: columns past kv_len never contribute.
-            qk = tl.where(kv_pos[None, :] < kv_len, qk, float("-inf"))
+            qk = tl.where(kv_pos[None, :] < kv_len, qk, -1e30)
 
             # ---- (c) block-sparse scoping: disallowed tiles → -inf --------
             # (triton has no `continue`; -inf columns vanish in softmax,
@@ -313,7 +313,7 @@ if HAS_TRITON:
                 scope = tl.load(
                     MASK + seq * stride_m0 + pid_m * stride_m1 + n * stride_m2
                 )
-                qk = tl.where(scope != 0, qk, float("-inf"))
+                qk = tl.where(scope != 0, qk, -1e30)
 
             # ---- online softmax (FlashAttention) ---------------------------
             m_ij = tl.maximum(m_i, tl.max(qk, 1))
