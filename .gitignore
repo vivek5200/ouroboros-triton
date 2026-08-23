@@ -1,0 +1,12 @@
+# Build artifacts & local state
+__pycache__/
+*.pyc
+.pytest_cache/
+*.so
+src/cpp/*.o
+target/
+dist/
+build/
+
+# Secrets & local env
+.env
