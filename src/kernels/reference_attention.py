@@ -39,6 +39,13 @@ DOCUMENTED SIMPLIFICATIONS (reference vs. engine):
   fixed channel permutation ``perm(t) = (t%2)*HALF + t//2`` on both sides —
   same math, different memory interleave. With ``d_head == 2`` (the tests'
   regime) both layouts coincide exactly.
+
+  That bridge is implemented by :func:`perm`, :func:`apply_channel_perm` and
+  :func:`invert_channel_perm` below. Mathematical note (verified): the
+  permutation is an involution ONLY for ``d_head in {2, 4}`` — its order is
+  the multiplicative order of 2 mod ``d_head - 1``, which is 3 at
+  ``d_head == 8`` (cycles ``(1 4 2)(3 5 6)``, 0 and 7 fixed) — so round-trips
+  must go through the explicit inverse, never the forward map.
 """
 
 import math
@@ -49,6 +56,9 @@ from src.block_table import BlockTable
 __all__ = [
     "rope_rotate",
     "roped_dot",
+    "perm",
+    "apply_channel_perm",
+    "invert_channel_perm",
     "golden_attention",
     "reference_from_block_table",
 ]
@@ -106,6 +116,87 @@ def roped_dot(q, k, q_pos: int, k_pos: int, base: float = 10000.0) -> float:
     qr = rope_rotate(q, q_pos, base)
     kr = rope_rotate(k, k_pos, base)
     return sum(a * b for a, b in zip(qr, kr))
+
+
+# ---------------------------------------------------------------------------
+# Channel-permutation bridge: interleaved layout (this oracle) <-> half-split
+# layout (the Triton kernel). See "RoPE layout" in the module docstring.
+# ---------------------------------------------------------------------------
+
+
+def perm(t: int, half: int) -> int:
+    """Map interleaved-pair channel ``t`` to its half-split slot.
+
+    The documented relabeling (module docstring, "RoPE layout")::
+
+        perm(t) = (t % 2) * half + t // 2
+
+    Interleaved pair ``j`` is ``(x[2j], x[2j+1])``; half-split pair ``j`` is
+    ``(x[j], x[j + half])``. Both are rotated by the SAME angle
+    ``base**(-2j/d)``, so the map is pure layout: first components
+    ``t = 2j -> j``, second components ``t = 2j + 1 -> j + half``. The inverse
+    mapping is ``perm_inv(m) = 2*m`` for ``m < half`` else ``2*(m - half) + 1``.
+
+    INVOLUTION STATUS (verified mathematically): ``perm`` is the classic
+    out-shuffle on ``d = 2 * half`` slots, so its order equals the
+    multiplicative order of 2 modulo ``d - 1`` (well defined since even ``d``
+    gives ``gcd(2, d - 1) = 1``). It is therefore its OWN inverse only for
+    ``d_head in {2, 4}`` (where ``(d - 1) | 3``); at ``d_head == 8`` the order
+    is 3 — cycles ``(1 4 2)(3 5 6)`` with channels 0 and 7 fixed — so there
+    the inverse DIFFERS from the forward permutation.
+
+    Raises:
+        RuntimeError: if ``t`` is not an in-domain int or ``half`` invalid.
+    """
+    if isinstance(t, bool) or not isinstance(t, int):
+        raise RuntimeError(f"invalid channel index: {t!r}")
+    if isinstance(half, bool) or not isinstance(half, int) or half <= 0:
+        raise RuntimeError(f"invalid half width: {half!r}")
+    if t < 0 or t >= 2 * half:
+        raise RuntimeError(f"channel index {t} out of range for d_head={2 * half}")
+    return (t % 2) * half + t // 2
+
+
+def _require_matching_half(vector, half: int) -> None:
+    d = _require_even_vector(vector, "vector")
+    if isinstance(half, bool) or not isinstance(half, int) or 2 * half != d:
+        raise RuntimeError(
+            f"half must satisfy 2*half == len(vector) == {d}, got {half!r}"
+        )
+
+
+def apply_channel_perm(vec, half: int):
+    """Relabel ``vec`` from interleaved-pair layout to kernel half-split layout.
+
+    ``out[perm(t, half)] == vec[t]`` for every channel ``t``. Applying this to
+    a golden-reference quantity (q/k/v payload vectors AND attention output
+    rows, which inherit v's layout) makes it directly comparable to the
+    kernel's half-split convention at any even ``d_head == 2 * half``; it is
+    the identity at ``d_head == 2``. Rotation commutes with the map,
+    ``R_halfsplit(perm(x)) == perm(R_interleaved(x))``, so scores computed on
+    permuted inputs equal interleaved-layout scores exactly.
+
+    Returns a NEW list; the input is untouched.
+    """
+    _require_matching_half(vec, half)
+    out: list[float] = [0.0] * len(vec)
+    for t in range(len(vec)):
+        out[perm(t, half)] = vec[t]
+    return out
+
+
+def invert_channel_perm(vec, half: int):
+    """Exact inverse of :func:`apply_channel_perm`: ``out[t] == vec[perm(t, half)]``.
+
+    NOTE: the inverse coincides with the forward permutation ONLY when it is
+    an involution, i.e. for ``d_head = 2 * half in {2, 4}`` (see
+    :func:`perm`); NOT at e.g. ``d_head == 8``, where the forward map has
+    order 3. Always route round-trips through this function.
+
+    Returns a NEW list; the input is untouched.
+    """
+    _require_matching_half(vec, half)
+    return [vec[perm(t, half)] for t in range(len(vec))]
 
 
 def golden_attention(
