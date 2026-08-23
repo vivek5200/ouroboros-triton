@@ -262,14 +262,6 @@ if HAS_TRITON:
         kv_len = q_len
         hi = tl.cdiv(kv_len, BLOCK)
         for n in range(0, hi):
-            # ---- (c) block-sparse scoping: skip disallowed tiles outright --
-            if HAS_MASK:
-                scope = tl.load(
-                    MASK + seq * stride_m0 + pid_m * stride_m1 + n * stride_m2
-                )
-                if scope == 0:
-                    continue
-
             kv_phys = tl.load(PT + seq * stride_pts + n * stride_ptb).to(tl.int64)
             kv_pos = n * BLOCK + offs_t
             ks_off = kv_pos[:, None] * HALF + offs_d[None, :]
@@ -313,6 +305,15 @@ if HAS_TRITON:
 
             # Ragged tail: columns past kv_len never contribute.
             qk = tl.where(kv_pos[None, :] < kv_len, qk, float("-inf"))
+
+            # ---- (c) block-sparse scoping: disallowed tiles → -inf --------
+            # (triton has no `continue`; -inf columns vanish in softmax,
+            #  matching the golden reference's masked_fill semantics)
+            if HAS_MASK:
+                scope = tl.load(
+                    MASK + seq * stride_m0 + pid_m * stride_m1 + n * stride_m2
+                )
+                qk = tl.where(scope != 0, qk, float("-inf"))
 
             # ---- online softmax (FlashAttention) ---------------------------
             m_ij = tl.maximum(m_i, tl.max(qk, 1))
@@ -534,8 +535,8 @@ def dense_reference(page_table, q_cache, k_cache, v_cache, seq_lens, cos, sin,
     out = torch.zeros((S, H, max_len, D), dtype=torch.float32)
 
     def rope(x, pos):
-        c = cos[pos][:, None, :]          # [T, 1, D/2]
-        s = sin[pos][:, None, :]
+        c = cos[pos][None, :, :].to(torch.float32)   # [1, T, D/2] broadcast over H
+        s = sin[pos][None, :, :].to(torch.float32)
         x0, x1 = x[..., :hf], x[..., hf:]
         return torch.cat([x0 * c - x1 * s, x0 * s + x1 * c], dim=-1)
 
