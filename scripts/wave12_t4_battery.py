@@ -62,8 +62,8 @@ __all__ = [
 # keeps the harness default (8).
 DEFAULT_T4_SWEEP = (
     (16, 6, 128),
-    (32, 8, 256),
-    (64, 10, 384),
+    (24, 8, 192),
+    (32, 10, 256),
 )
 
 # CPU-smoke preset for hosts without a GPU (and CI): same pipeline, seconds
