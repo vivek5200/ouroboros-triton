@@ -407,6 +407,29 @@ def block_attention(
         ``[S, H, max_len, D]`` output tensor (rows past ``seq_lens[s]`` are zero).
     """
     _require_gpu_stack()
+
+    # ---- device co-location: CPU inputs are moved to the CUDA device ------
+    # Triton can only dereference CUDA pointers; mixed/CPU callers previously
+    # died with "Pointer argument (at N) cannot be accessed from Triton".
+    named = {
+        "page_table": page_table, "q_cache": q_cache, "k_cache": k_cache,
+        "v_cache": v_cache, "seq_lens": seq_lens, "cos": cos, "sin": sin,
+    }
+    if any(t.is_cuda for t in named.values() if hasattr(t, "is_cuda")):
+        cuda_dev = next(
+            t.device for t in named.values()
+            if hasattr(t, "is_cuda") and t.is_cuda
+        )
+        page_table, q_cache, k_cache, v_cache, seq_lens, cos, sin = (
+            t.to(cuda_dev) for t in (
+                page_table, q_cache, k_cache, v_cache, seq_lens, cos, sin
+            )
+        )
+    if bias is not None and hasattr(bias, "to") and not bias.is_cuda:
+        bias = bias.to(cuda_dev)
+    if mask is not None and hasattr(mask, "to") and not mask.is_cuda:
+        mask = mask.to(cuda_dev)
+
     S, max_b = page_table.shape
     n_phys, H, blk, D = q_cache.shape
     if blk != BLOCK_SIZE:
