@@ -1,0 +1,116 @@
+t4_full_suite.sh — started 2026-08-24T22:45:20+05:30
+PARENT     : /home/vivek/ouroboros/ouroboros-triton/..
+triton repo: /home/vivek/ouroboros/ouroboros-triton/../ouroboros-triton
+core repo  : /home/vivek/ouroboros/ouroboros-triton/../ouroboros-core
+log file   : /home/vivek/ouroboros/ouroboros-triton/scripts/logs/t4_full_suite_20260824_224520.log
+
+=======================================================================
+== SECTION A: environment report
+=======================================================================
+--- nvidia-smi ---
+Mon Aug 24 22:45:21 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.173.02             Driver Version: 580.173.02     CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 3050 ...    Off |   00000000:01:00.0 Off |                  N/A |
+| N/A   54C    P0             17W /   60W |      15MiB /   4096MiB |      9%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A            2976      G   /usr/lib/xorg/Xorg                        4MiB |
++-----------------------------------------------------------------------------------------+
+
+--- python / torch / CUDA / triton versions ---
+/home/vivek/.local/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:368: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /__w/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+python      : 3.12.3 (Linux-7.0.0-28-generic-x86_64-with-glibc2.39)
+torch       : 2.13.0+cpu  cuda_available=False (build: None)
+triton      : NOT INSTALLED
+
+=======================================================================
+== SECTION B: full triton suite — python3 -m pytest tests/ -q
+=======================================================================
+...........................ssssss........................ssssss......... [ 46%]
+........................................................................ [ 92%]
+...........                                                              [100%]
+=============================== warnings summary ===============================
+../../.local/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:368
+  /home/vivek/.local/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:368: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /__w/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+    cpu = _conversion_method_template(device=torch.device("cpu"))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+143 passed, 12 skipped, 1 warning in 1.18s
+Section B pytest exit code: 0
+
+=======================================================================
+== SECTION C: permutation-aware d_head=8 study (perm/apply_channel_perm bridge)
+=======================================================================
+/home/vivek/.local/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:368: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /__w/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+{
+  "d_head": 8,
+  "half": 4,
+  "n_tokens": 12,
+  "rope_base": 10000.0,
+  "seed": 7,
+  "perm_map": [
+    0,
+    4,
+    1,
+    5,
+    2,
+    6,
+    3,
+    7
+  ],
+  "perm_is_involution": false,
+  "unpermuted_max_diff": 1.1172524874460041,
+  "permuted_max_diff": 0.0,
+  "ratio": Infinity,
+  "forward_roundtrip_max_err": 1.9417371153831482,
+  "inverse_roundtrip_max_err": 0.0,
+  "ok": true,
+  "verdict": "PASS: permuted max_diff << un-permuted max_diff"
+}
+[perm-study] un-permuted max_diff = 1.117252
+[perm-study]   permuted  max_diff = 0.000e+00
+[perm-study] PASS: permuted max_diff << un-permuted max_diff
+Section C exit code: 0 (OK)
+
+=======================================================================
+== SECTION D: placement-head sweep — scaling_study configs {16,6ep,128} {32,8ep,256} {64,10ep,384}
+=======================================================================
+/home/vivek/.local/lib/python3.12/site-packages/torch/_subclasses/functional_tensor.py:368: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /__w/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+
+[head-sweep] rendered scaling table (scaling_study.render_table):
+d_model  epochs  instances   fresh    post    lift
+--------------------------------------------------
+     16       6        128  0.0778  0.6801  0.6023
+     32       8        256  0.1113  0.4124  0.3011
+     64      10        384  0.0742  0.1648  0.0907
+
+[head-sweep] device: cpu  per-cell seconds: [2.152, 4.004, 7.95]
+[head-sweep] d_model=16 epochs=6 instances=128: lift=0.602264 finite=True
+[head-sweep] d_model=32 epochs=8 instances=256: lift=0.301099 finite=True
+[head-sweep] d_model=64 epochs=10 instances=384: lift=0.090688 finite=True
+[head-sweep] PASS: all lifts finite
+Section D exit code: 0 (OK)
+
+=======================================================================
+== VERDICT
+=======================================================================
+A: environment report   (informational)
+B: triton pytest rc     : 0   <- gates exit code
+C: perm-study rc        : 0   (report-only)
+D: head-sweep rc        : 0   <- gates exit code (non-finite lift)
+OVERALL: PASS (log: /home/vivek/ouroboros/ouroboros-triton/scripts/logs/t4_full_suite_20260824_224520.log)
