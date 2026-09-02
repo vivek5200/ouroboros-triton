@@ -22,6 +22,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      - name: Build C++ parity twin
+        run: bash src/cpp/build.sh
+        continue-on-error: true
+
       - name: Run test suite
         env:
           PYTHONPATH: .
