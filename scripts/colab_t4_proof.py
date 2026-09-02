@@ -192,21 +192,24 @@ SECTION_RESULTS["E_triton_pytest"] = {
 # ---------------------------------------------------------------------------
 banner("SECTION F: Permutation Bridge Study (d_head=8)")
 
-perm_result = run(f"""python3 -c "
-import sys, json
-sys.path.insert(0, '{TRITON_DIR}')
-sys.path.insert(0, '{TRITON_DIR}/scripts')
+_section_f = os.path.join(WORK_DIR, "_section_f.py")
+with open(_section_f, "w") as _f:
+    _f.write(f"""\
+import sys, json, os
+sys.path.insert(0, r"{TRITON_DIR}")
+sys.path.insert(0, os.path.join(r"{TRITON_DIR}", "scripts"))
 import wave12_t4_battery as battery
-battery.set_triton_root('{TRITON_DIR}')
+battery.set_triton_root(r"{TRITON_DIR}")
 result = battery.perm_study(d_head=8)
 print(json.dumps(result, indent=2))
 print()
-print(f'un-permuted max_diff = {{result[\"unpermuted_max_diff\"]:.6f}}')
-print(f'  permuted  max_diff = {{result[\"permuted_max_diff\"]:.3e}}')
-print(f'verdict: {{result[\"verdict\"]}}')
-assert result['ok'], f'Permutation bridge FAILED: {{result[\"verdict\"]}}'
-"
-""", cwd=TRITON_DIR, check=False)
+print("un-permuted max_diff = %.6f" % result["unpermuted_max_diff"])
+print("  permuted  max_diff = %.3e" % result["permuted_max_diff"])
+print("verdict:", result["verdict"])
+assert result["ok"], "Permutation bridge FAILED: " + result["verdict"]
+""")
+
+perm_result = run(f"python3 {_section_f}", cwd=TRITON_DIR, check=False)
 
 SECTION_RESULTS["F_perm_study"] = {
     "status": "PASS" if perm_result.returncode == 0 else "FAIL",
@@ -219,28 +222,31 @@ SECTION_RESULTS["F_perm_study"] = {
 # ---------------------------------------------------------------------------
 banner("SECTION G: Placement-Head Scaling Sweep")
 
-sweep_result = run(f"""python3 -c "
-import sys, math
-sys.path.insert(0, '{TRITON_DIR}')
-sys.path.insert(0, '{TRITON_DIR}/scripts')
+_section_g = os.path.join(WORK_DIR, "_section_g.py")
+with open(_section_g, "w") as _f:
+    _f.write(f"""\
+import sys, math, os
+sys.path.insert(0, r"{TRITON_DIR}")
+sys.path.insert(0, os.path.join(r"{TRITON_DIR}", "scripts"))
 import wave12_t4_battery as battery
-battery.set_triton_root('{TRITON_DIR}')
-battery.set_core_src('{CORE_DIR}')
+battery.set_triton_root(r"{TRITON_DIR}")
+battery.set_core_src(r"{CORE_DIR}")
 rows = battery.head_sweep()
 print()
 print(battery.render_table(rows))
 print()
 for r in rows:
-    print(f'd_model={{r[\"d_model\"]}} epochs={{r[\"epochs\"]}} '
-          f'instances={{r[\"instances\"]}}: lift={{r[\"lift\"]:.6f}} '
-          f'finite={{math.isfinite(float(r[\"lift\"]))}}')
-bad = [r for r in rows if not math.isfinite(float(r['lift']))]
+    print("d_model=%s epochs=%s instances=%s: lift=%.6f finite=%s" % (
+        r["d_model"], r["epochs"], r["instances"],
+        r["lift"], math.isfinite(float(r["lift"]))))
+bad = [r for r in rows if not math.isfinite(float(r["lift"]))]
 if bad:
-    print(f'FATAL: {{len(bad)}} non-finite lift(s)')
+    print("FATAL: %d non-finite lift(s)" % len(bad))
     sys.exit(1)
-print('PASS: all lifts finite')
-"
-""", cwd=TRITON_DIR, check=False, timeout=300)
+print("PASS: all lifts finite")
+""")
+
+sweep_result = run(f"python3 {_section_g}", cwd=TRITON_DIR, check=False, timeout=300)
 
 SECTION_RESULTS["G_head_sweep"] = {
     "status": "PASS" if sweep_result.returncode == 0 else "FAIL",

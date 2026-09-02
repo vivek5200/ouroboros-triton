@@ -6,7 +6,7 @@
 # Output: src/cpp/ouroboros_cpp<ext-suffix>.so   (importable from src/cpp/)
 set -u
 
-cd "$(dirname "$0")/.."   # repo root
+cd "$(dirname "$0")/../.."   # repo root (src/cpp -> src -> repo)
 
 PYTHON="${PYTHON:-python3}"
 OUT_DIR="src/cpp"
