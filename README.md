@@ -1,5 +1,7 @@
 # Ouroboros Triton
 
+![tests](https://github.com/vivek5200/ouroboros-triton/actions/workflows/tests.yml/badge.svg)
+
 C++/Triton bare-metal engine for the Ouroboros v7.1 code refactoring system.
 
 ## Modules
